@@ -1,0 +1,15 @@
+{
+    "projectName": "Jack",
+    "languages": [{
+        "id": "jack",
+        "grammar": "src/language/jack.langium",
+        "fileExtensions": [".jack"],
+        "textMate": {
+            "out": "syntaxes/jack.tmLanguage.json"
+        },
+        "monarch": {
+            "out": "syntaxes/jack.monarch.ts"
+        }
+    }],
+    "out": "src/language/generated"
+}
