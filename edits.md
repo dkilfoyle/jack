@@ -1,23 +1,12 @@
-import { DocumentState, EmptyFileSystem } from "langium";
-import { startLanguageServer } from "langium/lsp";
-import { BrowserMessageReader, BrowserMessageWriter, Diagnostic, NotificationType, createConnection } from "vscode-languageserver/browser.js";
-import { createJackServices } from "./jack-module.js";
+1. Add documentChangeNotification to main-browser so that worker will send a notification with serialized AST after every document change
 
-declare const self: DedicatedWorkerGlobalScope;
-
-const messageReader = new BrowserMessageReader(self);
-const messageWriter = new BrowserMessageWriter(self);
-
-const connection = createConnection(messageReader, messageWriter);
-
-const { shared, Jack } = createJackServices({ connection, ...EmptyFileSystem });
-
+```
 startLanguageServer(shared);
 
 // Send a notification with the serialized AST after every document change
 type DocumentChange = { uri: string; content: string; diagnostics: Diagnostic[] };
 const documentChangeNotification = new NotificationType<DocumentChange>("browser/DocumentChange");
-const jsonSerializer = Jack.serializer.JsonSerializer;
+const jsonSerializer = Hdl.serializer.JsonSerializer;
 shared.workspace.DocumentBuilder.onBuildPhase(DocumentState.Validated, (documents) => {
   for (const document of documents) {
     const json = jsonSerializer.serialize(document.parseResult.value, {
@@ -31,3 +20,13 @@ shared.workspace.DocumentBuilder.onBuildPhase(DocumentState.Validated, (document
     });
   }
 });
+```
+
+2. Add documentChange listener to wrapper in setupClass.js
+
+```
+const client = wrapper.getLanguageClient();
+if (!client) throw new Error("Unable to obtain language client")
+client.onNotification("browser/DocumentChange", (resp:any) => console.log(resp));
+```
+

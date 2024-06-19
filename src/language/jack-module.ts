@@ -9,6 +9,7 @@ import {
   Scope,
   ScopeProvider,
   inject,
+  AstNodeDescription,
 } from "langium";
 import {
   createDefaultModule,
@@ -20,7 +21,7 @@ import {
 } from "langium/lsp";
 import { JackGeneratedModule, JackGeneratedSharedModule } from "./generated/module.js";
 import { JackValidator, registerValidationChecks } from "./jack-validator.js";
-import { isGreeting, isModel } from "./generated/ast.js";
+import { isExpression, isLetStatement, isSubroutineDec } from "./generated/ast.js";
 
 export class JackScopeProvider implements ScopeProvider {
   private astNodeDescriptionProvider: AstNodeDescriptionProvider;
@@ -30,18 +31,59 @@ export class JackScopeProvider implements ScopeProvider {
   }
   getScope(context: ReferenceInfo): Scope {
     //make sure which cross-reference you are handling right now
-    if (isGreeting(context.container) && context.property === "person") {
-      //Success! We are handling the cross-reference of a greeting to a person!
+    console.log("getScope Context", context);
+
+    if (
+      (isLetStatement(context.container) && context.property === "varName") ||
+      (isExpression(context.container) && context.property == "element")
+    ) {
+      console.log("isLet");
 
       //get the root node of the document
-      const model = AstUtils.getContainerOfType(context.container, isModel)!;
+      const subroutineDec = AstUtils.getContainerOfType(context.container, isSubroutineDec)!;
       //select all persons from this document
-      const persons = model.persons;
+      const varDecs = subroutineDec.varDec;
       //transform them into node descriptions
-      const descriptions = persons.map((p) => this.astNodeDescriptionProvider.createDescription(p, p.name));
+      const descriptions: AstNodeDescription[] = [];
+      varDecs.forEach((vd) => {
+        vd.varNames.forEach((vn) => descriptions.push(this.astNodeDescriptionProvider.createDescription(vn, vn.name)));
+      });
       //create the scope
       return new MapScope(descriptions);
     }
+
+    // if (isMemberCall(context.container) && context.property == "element") {
+    //   //Success! We are handling the cross-reference of a greeting to a person!
+    //   console.log("isMemberCall", context);
+
+    //   const getSubroutineDec = (node: AstNode | undefined) => {
+    //     let item = node;
+    //     while (item) {
+    //       console.log("Checking", item);
+    //       if (item.$type == "SubroutineDec") return item;
+    //       item = item.$container;
+    //     }
+    //     return undefined;
+    //   };
+
+    //   const subroutineDec = getSubroutineDec(context.container) as SubroutineDec;
+    //   // const subroutineDec = AstUtils.getContainerOfType(context.container, isSubroutineDec)!;
+    //   console.log("subroutindec = ", subroutineDec);
+
+    //   //get the root node of the document
+    //   // const subroutineDec = AstUtils.getContainerOfType(context.container, isSubroutineDec)!;
+    //   //select all persons from this document
+    //   const varDecs = subroutineDec.varDec;
+    //   console.log("subroutinedec", subroutineDec, varDecs);
+    //   //transform them into node descriptions
+    //   const descriptions: AstNodeDescription[] = [];
+    //   varDecs.forEach((vd) => {
+    //     vd.varNames.forEach((vn) => descriptions.push(this.astNodeDescriptionProvider.createDescription(vn, vn.name)));
+    //   });
+    //   //create the scope
+    //   return new MapScope(descriptions);
+    // }
+
     return EMPTY_SCOPE;
   }
 }
