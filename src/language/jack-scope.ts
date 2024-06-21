@@ -1,16 +1,11 @@
 import type { AstNode, AstNodeDescription, LangiumDocument, PrecomputedScopes } from "langium";
-import type { DomainModelServices } from "./domain-model-module.js";
-import type { QualifiedNameProvider } from "./domain-model-naming.js";
-import type { Domainmodel, PackageDeclaration } from "./generated/ast.js";
 import { AstUtils, Cancellation, DefaultScopeComputation, interruptAndCheck, MultiMap } from "langium";
-import { isType, isPackageDeclaration } from "./generated/ast.js";
+import { JackServices } from "./jack-module.js";
+import { Program } from "./generated/ast.js";
 
-export class DomainModelScopeComputation extends DefaultScopeComputation {
-  qualifiedNameProvider: QualifiedNameProvider;
-
-  constructor(services: DomainModelServices) {
+export class JackScopeComputation extends DefaultScopeComputation {
+  constructor(services: JackServices) {
     super(services);
-    this.qualifiedNameProvider = services.references.QualifiedNameProvider;
   }
 
   /**
@@ -18,30 +13,30 @@ export class DomainModelScopeComputation extends DefaultScopeComputation {
    */
   override async computeExports(document: LangiumDocument, cancelToken = Cancellation.CancellationToken.None): Promise<AstNodeDescription[]> {
     const descr: AstNodeDescription[] = [];
-    for (const modelNode of AstUtils.streamAllContents(document.parseResult.value)) {
-      await interruptAndCheck(cancelToken);
-      if (isType(modelNode)) {
-        let name = this.nameProvider.getName(modelNode);
-        if (name) {
-          if (isPackageDeclaration(modelNode.$container)) {
-            name = this.qualifiedNameProvider.getQualifiedName(modelNode.$container as PackageDeclaration, name);
-          }
-          descr.push(this.descriptions.createDescription(modelNode, name, document));
-        }
-      }
-    }
+    // for (const modelNode of AstUtils.streamAllContents(document.parseResult.value)) {
+    //   await interruptAndCheck(cancelToken);
+    //   if (isType(modelNode)) {
+    //     let name = this.nameProvider.getName(modelNode);
+    //     if (name) {
+    //       if (isPackageDeclaration(modelNode.$container)) {
+    //         name = this.qualifiedNameProvider.getQualifiedName(modelNode.$container as PackageDeclaration, name);
+    //       }
+    //       descr.push(this.descriptions.createDescription(modelNode, name, document));
+    //     }
+    //   }
+    // }
     return descr;
   }
 
   override async computeLocalScopes(document: LangiumDocument, cancelToken = Cancellation.CancellationToken.None): Promise<PrecomputedScopes> {
-    const model = document.parseResult.value as Domainmodel;
+    const model = document.parseResult.value as Program;
     const scopes = new MultiMap<AstNode, AstNodeDescription>();
     await this.processContainer(model, scopes, document, cancelToken);
     return scopes;
   }
 
   protected async processContainer(
-    container: Domainmodel | PackageDeclaration,
+    container: Program,
     scopes: PrecomputedScopes,
     document: LangiumDocument,
     cancelToken: Cancellation.CancellationToken
@@ -63,15 +58,5 @@ export class DomainModelScopeComputation extends DefaultScopeComputation {
     }
     scopes.addAll(container, localDescriptions);
     return localDescriptions;
-  }
-
-  protected createQualifiedDescription(
-    pack: PackageDeclaration,
-    description: AstNodeDescription,
-    document: LangiumDocument
-  ): AstNodeDescription {
-    const name = this.qualifiedNameProvider.getQualifiedName(pack.name, description.name);
-    // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-    return this.descriptions.createDescription(description.node!, name, document);
   }
 }

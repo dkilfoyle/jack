@@ -22,6 +22,7 @@ import {
 import { JackGeneratedModule, JackGeneratedSharedModule } from "./generated/module.js";
 import { JackValidator, registerValidationChecks } from "./jack-validator.js";
 import { isExpression, isLetStatement, isSubroutineDec } from "./generated/ast.js";
+import { JackScopeComputation } from "./jack-scope.js";
 
 export class JackScopeProvider implements ScopeProvider {
   private astNodeDescriptionProvider: AstNodeDescriptionProvider;
@@ -97,6 +98,7 @@ export type JackAddedServices = {
   };
   references: {
     ScopeProvider: JackScopeProvider;
+    ScopeComputation: JackScopeComputation;
   };
 };
 
@@ -117,6 +119,7 @@ export const JackModule: Module<JackServices, PartialLangiumServices & JackAdded
   },
   references: {
     ScopeProvider: (services) => new JackScopeProvider(services),
+    ScopeComputation: (services) => new JackScopeComputation(services),
   },
 };
 
