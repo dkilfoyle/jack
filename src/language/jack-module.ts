@@ -1,16 +1,4 @@
-import {
-  AstNodeDescriptionProvider,
-  AstUtils,
-  EMPTY_SCOPE,
-  LangiumCoreServices,
-  MapScope,
-  type Module,
-  ReferenceInfo,
-  Scope,
-  ScopeProvider,
-  inject,
-  AstNodeDescription,
-} from "langium";
+import { type Module, inject, DeepPartial } from "langium";
 import {
   createDefaultModule,
   createDefaultSharedModule,
@@ -21,73 +9,10 @@ import {
 } from "langium/lsp";
 import { JackGeneratedModule, JackGeneratedSharedModule } from "./generated/module.js";
 import { JackValidator, registerValidationChecks } from "./jack-validator.js";
-import { isExpression, isLetStatement, isSubroutineDec } from "./generated/ast.js";
-import { JackScopeComputation } from "./jack-scope.js";
-
-export class JackScopeProvider implements ScopeProvider {
-  private astNodeDescriptionProvider: AstNodeDescriptionProvider;
-  constructor(services: LangiumCoreServices) {
-    //get some helper services
-    this.astNodeDescriptionProvider = services.workspace.AstNodeDescriptionProvider;
-  }
-  getScope(context: ReferenceInfo): Scope {
-    //make sure which cross-reference you are handling right now
-    console.log("getScope Context", context);
-
-    if (
-      (isLetStatement(context.container) && context.property === "varName") ||
-      (isExpression(context.container) && context.property == "element")
-    ) {
-      console.log("isLet");
-
-      //get the root node of the document
-      const subroutineDec = AstUtils.getContainerOfType(context.container, isSubroutineDec)!;
-      //select all persons from this document
-      const varDecs = subroutineDec.varDec;
-      //transform them into node descriptions
-      const descriptions: AstNodeDescription[] = [];
-      varDecs.forEach((vd) => {
-        vd.varNames.forEach((vn) => descriptions.push(this.astNodeDescriptionProvider.createDescription(vn, vn.name)));
-      });
-      //create the scope
-      return new MapScope(descriptions);
-    }
-
-    // if (isMemberCall(context.container) && context.property == "element") {
-    //   //Success! We are handling the cross-reference of a greeting to a person!
-    //   console.log("isMemberCall", context);
-
-    //   const getSubroutineDec = (node: AstNode | undefined) => {
-    //     let item = node;
-    //     while (item) {
-    //       console.log("Checking", item);
-    //       if (item.$type == "SubroutineDec") return item;
-    //       item = item.$container;
-    //     }
-    //     return undefined;
-    //   };
-
-    //   const subroutineDec = getSubroutineDec(context.container) as SubroutineDec;
-    //   // const subroutineDec = AstUtils.getContainerOfType(context.container, isSubroutineDec)!;
-    //   console.log("subroutindec = ", subroutineDec);
-
-    //   //get the root node of the document
-    //   // const subroutineDec = AstUtils.getContainerOfType(context.container, isSubroutineDec)!;
-    //   //select all persons from this document
-    //   const varDecs = subroutineDec.varDec;
-    //   console.log("subroutinedec", subroutineDec, varDecs);
-    //   //transform them into node descriptions
-    //   const descriptions: AstNodeDescription[] = [];
-    //   varDecs.forEach((vd) => {
-    //     vd.varNames.forEach((vn) => descriptions.push(this.astNodeDescriptionProvider.createDescription(vn, vn.name)));
-    //   });
-    //   //create the scope
-    //   return new MapScope(descriptions);
-    // }
-
-    return EMPTY_SCOPE;
-  }
-}
+// import { isExpression, isLetStatement, isSubroutineDec } from "./generated/ast.js";
+import { JackScopeComputation } from "./jack-scope-computation.js";
+import { JackWorkspaceManager } from "./jack-workspace.js";
+import { JackScopeProvider } from "./jack-scope-provider.js";
 
 /**
  * Declaration of custom services - add your own service classes here.
@@ -123,6 +48,14 @@ export const JackModule: Module<JackServices, PartialLangiumServices & JackAdded
   },
 };
 
+export type JackSharedServices = LangiumSharedServices;
+
+export const JackSharedModule: Module<JackSharedServices, DeepPartial<JackSharedServices>> = {
+  workspace: {
+    WorkspaceManager: (services) => new JackWorkspaceManager(services),
+  },
+};
+
 /**
  * Create the full set of services required by Langium.
  *
@@ -142,7 +75,7 @@ export function createJackServices(context: DefaultSharedModuleContext): {
   shared: LangiumSharedServices;
   Jack: JackServices;
 } {
-  const shared = inject(createDefaultSharedModule(context), JackGeneratedSharedModule);
+  const shared = inject(createDefaultSharedModule(context), JackGeneratedSharedModule, JackSharedModule);
   const Jack = inject(createDefaultModule({ shared }), JackGeneratedModule, JackModule);
   shared.ServiceRegistry.register(Jack);
   registerValidationChecks(Jack);
