@@ -39,7 +39,7 @@ Statement:
     LetStatement | IfStatement | WhileStatement | DoStatement | ReturnStatement;
 
 LetStatement:
-    "let" varName=[NamedElement:ID] ("[" indexExpression=Expression "]")? "=" expression=Expression ";";
+    "let" varName=[NamedElement:ID] ("[" lhsIndexExpression=Expression "]")? "=" rhsExpression=Expression ";";
 
 IfStatement:
     "if" name=ID;
@@ -67,11 +67,6 @@ Logical infers Expression:
 
 Comparison infers Expression:
     MemberCall ({infer BinaryExpression.left=current} operator=('<' | '<=' | '>' | '>=' | '==' | '!=') right=MemberCall)*;
-
-//MemberCall infers Expression:
-//    "(" Expression ")" |
-//    NumberExpression |
-//    (element=[NamedElement:ID]);
 
  MemberCall infers Expression:
      Primary
@@ -109,7 +104,8 @@ Comparison infers Expression:
  	(
  	    arguments+=Expression (',' arguments+=Expression)*
  	)?
- 	')')?;
+ 	')')?
+     (explicitIndex?='[' expression=Expression ']')?;
 
  UnaryExpression:
      operator=('!' | '-' | '+') value=Expression;

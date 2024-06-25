@@ -13,6 +13,8 @@ import { JackValidator, registerValidationChecks } from "./jack-validator.js";
 import { JackScopeComputation } from "./jack-scope-computation.js";
 import { JackWorkspaceManager } from "./jack-workspace.js";
 import { JackScopeProvider } from "./jack-scope-provider.js";
+import { JackCompletionProvider } from "./jack-completion.js";
+import { JackSignatureHelpProvider } from "./jack-signature.js";
 
 /**
  * Declaration of custom services - add your own service classes here.
@@ -25,6 +27,10 @@ export type JackAddedServices = {
     ScopeProvider: JackScopeProvider;
     ScopeComputation: JackScopeComputation;
   };
+  // lsp: {
+  //   CompletionProvider: JackCompletionProvider;
+  //   SignatureHelp: JackSignatureHelpProvider;
+  // };
 };
 
 /**
@@ -45,6 +51,10 @@ export const JackModule: Module<JackServices, PartialLangiumServices & JackAdded
   references: {
     ScopeProvider: (services) => new JackScopeProvider(services),
     ScopeComputation: (services) => new JackScopeComputation(services),
+  },
+  lsp: {
+    CompletionProvider: (services) => new JackCompletionProvider(services),
+    SignatureHelp: (services) => new JackSignatureHelpProvider(services),
   },
 };
 

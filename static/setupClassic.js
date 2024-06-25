@@ -7,8 +7,9 @@ addMonacoStyles("monaco-editor-styles");
 const code = `// Inputs some numbers and computes their average
 class Main {
    function void main() {
-      var Array a; 
-      do a.dispose();
+      var int a;
+      let a = Math.min
+      // var Array a; 
       // var int length;
       // var int i, sum;
 

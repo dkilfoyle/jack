@@ -1,12 +1,8 @@
 export const arrayBuiltin = `class Array {
-  function int new(int size) {
-      var int i;
-      let i = 1;
-  }
 
-  // Disposes this array
-  method void dispose() {
-      // do Memory.deAlloc(this);
-      // return;
-  }
+    /** Constructs a new Array of the given size. */
+    function Array new(int size) {}
+
+    /** Disposes this array. */
+    method void dispose() {}
 }`;
