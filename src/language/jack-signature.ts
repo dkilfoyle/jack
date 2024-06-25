@@ -1,6 +1,6 @@
 import { AbstractSignatureHelpProvider } from "langium/lsp";
 import { JackServices } from "./jack-module.js";
-import { AstNode, LangiumDocument, MaybePromise, CstUtils } from "langium";
+import { AstNode, LangiumDocument, MaybePromise, CstUtils, DocumentationProvider } from "langium";
 import {
   CancellationToken,
   SignatureHelp,
@@ -12,8 +12,10 @@ import {
 import { Expression, isMemberCall, isSubroutineDec } from "./generated/ast.js";
 
 export class JackSignatureHelpProvider extends AbstractSignatureHelpProvider {
+  documentationProvider: DocumentationProvider;
   constructor(services: JackServices) {
     super();
+    this.documentationProvider = services.documentation.DocumentationProvider;
   }
 
   override provideSignatureHelp(
@@ -76,18 +78,12 @@ export class JackSignatureHelpProvider extends AbstractSignatureHelpProvider {
           title = title + `${p.type.$cstNode!.text} ${p.name}`;
           const end = title.length;
           if (i < subroutineDec.parameters.length - 1) title += ", ";
-          return ParameterInformation.create([start, end], "paramdoc" + i);
+          return ParameterInformation.create([start, end], undefined);
         });
-        signatures.push(
-          SignatureInformation.create(
-            title + ")",
-            "subroutine doc", // TODO: ?use documentation provider?
-            ...params
-          )
-        );
+        signatures.push(SignatureInformation.create(title + ")", this.documentationProvider.getDocumentation(subroutineDec), ...params));
       }
     }
-    console.log("getSignature", element, signatures, activeParameter);
+    // console.log("getSignature", element, signatures, activeParameter);
     return { signatures, activeParameter, activeSignature: 0 };
   }
 

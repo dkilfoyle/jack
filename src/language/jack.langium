@@ -4,7 +4,7 @@ entry Program:
     class=ClassDec;
 
 ClassDec:
-    "class" name=ID "{" classVarDec+=ClassVarDec* subroutineDec+=SubroutineDec* "}";
+    "class" name=ID "{" fieldClassVarDec+=FieldClassVarDec* staticClassVarDec+=StaticClassVarDec* subroutineDec+=SubroutineDec* "}";
 
 VarTypeRef:
     primitive = ("int" | "char" | "boolean") |
@@ -14,8 +14,11 @@ ReturnTypeRef:
     primitive = ("int" | "char" | "boolean" | "void") |
     reference = [ClassDec:ID];
 
-ClassVarDec:
-    decType=("static" | "field") type=VarTypeRef varNames+=VarName ("," varNames+=VarName)*;
+FieldClassVarDec:
+    decType="field" type=VarTypeRef varNames+=VarName ("," varNames+=VarName)*;
+
+StaticClassVarDec:
+    decType="static" type=VarTypeRef varNames+=VarName ("," varNames+=VarName)*;
 
 SubroutineDec:
     decType=("constructor" | "function" | "method") returnType=ReturnTypeRef name=ID "(" (parameters+=Parameter ("," parameters+=Parameter)*)? ")" SubroutineBody;
@@ -125,7 +128,7 @@ NumberExpression:
 // ExpressionList:
 //     (expressions+=Expression ("," expression+=Expression)*)?;
 
-type NamedElement = VarName | Parameter | SubroutineDec | ClassVarDec | ClassDec;
+type NamedElement = VarName | Parameter | SubroutineDec | StaticClassVarDec | FieldClassVarDec | ClassDec;
 
 hidden terminal WS: /\s+/;
 hidden terminal ML_COMMENT: /\/\*[\s\S]*?\*\//;
