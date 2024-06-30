@@ -15,6 +15,8 @@ import { JackWorkspaceManager } from "./jack-workspace.js";
 import { JackScopeProvider } from "./jack-scope-provider.js";
 import { JackCompletionProvider } from "./jack-completion.js";
 import { JackSignatureHelpProvider } from "./jack-signature.js";
+import { JackCodeActionProvider } from "./jack-codeactions.js";
+import { JackNodeKindProvider } from "./jack-nodekind.js";
 
 /**
  * Declaration of custom services - add your own service classes here.
@@ -55,6 +57,7 @@ export const JackModule: Module<JackServices, PartialLangiumServices & JackAdded
   lsp: {
     CompletionProvider: (services) => new JackCompletionProvider(services),
     SignatureHelp: (services) => new JackSignatureHelpProvider(services),
+    CodeActionProvider: (services) => new JackCodeActionProvider(),
   },
 };
 
@@ -63,6 +66,9 @@ export type JackSharedServices = LangiumSharedServices;
 export const JackSharedModule: Module<JackSharedServices, DeepPartial<JackSharedServices>> = {
   workspace: {
     WorkspaceManager: (services) => new JackWorkspaceManager(services),
+  },
+  lsp: {
+    NodeKindProvider: (services) => new JackNodeKindProvider(),
   },
 };
 

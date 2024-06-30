@@ -1,4 +1,4 @@
-import { isClassType, isNilType, TypeDescription } from "./descriptions.js";
+import { isCharType, isClassType, isNullType, isNumberType, TypeDescription } from "./descriptions.js";
 
 export function isAssignable(from: TypeDescription, to: TypeDescription): boolean {
   if (isClassType(from)) {
@@ -13,9 +13,20 @@ export function isAssignable(from: TypeDescription, to: TypeDescription): boolea
     return fromClass == toClass;
   }
 
-  if (isNilType(from)) {
+  // var Array a;
+  // let a = 1000;
+  if (isClassType(to) && isNumberType(from)) return true;
+
+  if (isNullType(from)) {
     return isClassType(to); // var Array a; let a = nil;
   }
+
+  if (isCharType(to)) {
+    return isNumberType(from);
+  }
+
+  // if (isErrorType(from)) console.log("Error from", from);
+  // if (isErrorType(to)) console.log("Error to", to);
 
   return from.$type === to.$type;
 }

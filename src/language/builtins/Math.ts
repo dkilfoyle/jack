@@ -36,6 +36,10 @@ export const mathBuiltin = `class Math {
     /** Returns the greater number. */
     function int max(int a, int b) {}
 
-    /** Returns the smaller number. */
+    /** Returns the smaller number. 
+     * @param {int} a first number
+     * @param {int} b second number
+     * @return {int} minimum of a and b
+    */
     function int min(int a, int b) {}
 }`;

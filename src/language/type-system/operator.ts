@@ -1,6 +1,7 @@
 import { TypeDescription } from "./descriptions.js";
 
 export function isLegalOperation(operator: string, left: TypeDescription, right?: TypeDescription): boolean {
+  if (left.$type == "any" || right?.$type == "any") return true;
   if (operator === "+") {
     if (!right) {
       return left.$type === "number";

@@ -1,0 +1,323 @@
+import {
+  DoStatement,
+  Expression,
+  IfStatement,
+  isBinaryExpression,
+  isBooleanExpression,
+  isClassDec,
+  isDoStatement,
+  isIfStatement,
+  isLetStatement,
+  isMemberCall,
+  isNumberExpression,
+  isReturnStatement,
+  isSubroutineDec,
+  isThisExpression,
+  isUnaryExpression,
+  isVarName,
+  isWhileStatement,
+  LetStatement,
+  MemberCall,
+  ReturnStatement,
+  Statement,
+  SubroutineDec,
+  WhileStatement,
+  type ClassDec,
+  type Program,
+} from "../../language/generated/ast.js";
+import { CompositeGeneratorNode, expandToNode, joinToNode, toString } from "langium/generate";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import { extractDestinationAndName } from "../cli-util.js";
+import { inferType } from "../../language/type-system/infer.js";
+// import _ from "lodash";
+
+interface ClassSymbolTableEntry {
+  name: string;
+  type: string;
+  kind: "this" | "static";
+  num: number;
+}
+
+interface methodSymbolTableEntry {
+  name: string;
+  type: string;
+  kind: "argument" | "local";
+  num: number;
+}
+
+const classSymbolTable: ClassSymbolTableEntry[] = [];
+const methodSymbolTable: methodSymbolTableEntry[] = [];
+
+function getSymbol(name: string) {
+  let s = methodSymbolTable.find((s) => s.name == name) || classSymbolTable.find((s) => s.name == name);
+  if (s) return `${s.kind} ${s.num} // ${s.name}`;
+  console.error("Get Symbol not found", name);
+  throw Error("get symbol not found");
+}
+
+let labelCount = 0;
+
+function buildClassSymbolTable(classDec: ClassDec) {
+  classSymbolTable.length = 0;
+  classDec.fieldClassVarDec.forEach((fcvd, i) =>
+    fcvd.varNames.forEach((vn, j) => {
+      if (isVarName(vn))
+        classSymbolTable.push({
+          name: vn.name,
+          type: inferType(fcvd, new Map()).$type,
+          kind: "this",
+          num: i + j,
+        });
+    })
+  );
+  classDec.staticClassVarDec.forEach((vd, i) =>
+    vd.varNames.forEach((vn, j) => {
+      if (isVarName(vn))
+        classSymbolTable.push({
+          name: vn.name,
+          type: inferType(vd, new Map()).$type,
+          kind: "static",
+          num: i + j,
+        });
+    })
+  );
+}
+
+function buildMethodSymbolTable(subroutineDec: SubroutineDec) {
+  methodSymbolTable.length = 0;
+  if (subroutineDec.decType == "function") {
+    console.log("function symbol table same as method symbol table??");
+  }
+  if (subroutineDec.decType == "method" && isClassDec(subroutineDec.$container))
+    methodSymbolTable.push({
+      name: "this",
+      type: subroutineDec.$container.name,
+      kind: "argument",
+      num: 0,
+    }); // no this for constructors or functions
+  subroutineDec.parameters.forEach((p, i) => {
+    methodSymbolTable.push({
+      name: p.name,
+      type: inferType(p.type, new Map()).$type,
+      kind: "argument",
+      num: i + 1,
+    });
+  });
+  subroutineDec.varDec.forEach((vd, i) => {
+    vd.varNames.forEach((vn, j) => {
+      if (isVarName(vn))
+        methodSymbolTable.push({
+          name: vn.name,
+          type: inferType(vn, new Map()).$type,
+          kind: "local",
+          num: i + j,
+        });
+    });
+  });
+}
+
+function compileClass(classDec: ClassDec) {
+  // build class level symbol table
+  buildClassSymbolTable(classDec);
+
+  return expandToNode`
+    // Class ${classDec.name}
+    // Class level symbol table
+    ${joinToNode(classSymbolTable.map((e) => `// ${e.name}:${e.type} - ${e.kind} [${e.num}]`))}
+    ${joinToNode(classDec.subroutineDec.map((s) => compileMethod(s)))}
+  `;
+}
+
+function getSubroutineName(subroutineDec: SubroutineDec) {
+  return `${(subroutineDec.$container as ClassDec).name}.${subroutineDec.name}(${subroutineDec.parameters.map((p) => p.name).join(", ")}`;
+}
+
+function printMethodSymbolTable(name: string) {
+  return expandToNode`
+  // Method ${name} Symbol Table
+  ${joinToNode(
+    methodSymbolTable.map((e) => `// ${e.name}:${e.type} - ${e.kind} [${e.num}]`),
+    { appendNewLineIfNotEmpty: true }
+  )}`;
+}
+
+function compileMethod(subroutineDec: SubroutineDec) {
+  buildMethodSymbolTable(subroutineDec);
+  if (!isClassDec(subroutineDec.$container)) throw Error();
+  if (subroutineDec.decType == "constructor")
+    return expandToNode`
+      function ${getSubroutineName(subroutineDec)}
+        ${printMethodSymbolTable(getSubroutineName(subroutineDec))}
+        push constant ${classSymbolTable.filter((s) => s.kind == "this").length}
+        call Memory.alloc 1
+        pop pointer 0
+        // body
+        ${compileStatements(subroutineDec.statements)}
+    `;
+  else
+    return expandToNode`
+      function ${getSubroutineName(subroutineDec)}
+        ${printMethodSymbolTable(getSubroutineName(subroutineDec))}
+        ${compileStatements(subroutineDec.statements)}
+      `;
+}
+
+function compileStatements(statements: Statement[]) {
+  return joinToNode(
+    statements.map((s) => {
+      if (isLetStatement(s)) return compileLetStatement(s);
+      if (isWhileStatement(s)) return compileWhileStatement(s);
+      if (isIfStatement(s)) return compileIfStatement(s);
+      if (isDoStatement(s)) return compileDoStatement(s);
+      if (isReturnStatement(s)) return compileReturnStatement(s);
+      throw Error("Unimplemented statement type");
+    }),
+    { appendNewLineIfNotEmpty: true }
+  );
+}
+
+function compileLetStatement(letStatement: LetStatement) {
+  return expandToNode`
+    // ${letStatement.$cstNode?.text}
+    ${compileExpression(letStatement.rhsExpression)}
+    pop ${getSymbol(letStatement.varName.$refText)}
+    `;
+}
+function compileWhileStatement(whileStatement: WhileStatement): CompositeGeneratorNode {
+  const label = `LWHILE${labelCount++}`;
+  return expandToNode`
+  label ${label}
+    ${compileExpression(whileStatement.testExpression)}
+    not
+    if-goto ${label}_END
+    ${compileStatements(whileStatement.statements)}
+    goto ${label}
+  label ${label}_END`;
+}
+function compileIfStatement(ifStatement: IfStatement): CompositeGeneratorNode {
+  const label = `LIF${labelCount++}`;
+  return expandToNode`
+    // if (${ifStatement.testExpression.$cstNode?.text})
+    ${compileExpression(ifStatement.testExpression)}
+    not
+    if-goto ${label}_ELSE
+    ${compileStatements(ifStatement.statements)}
+    goto ${label}_END
+    label ${label}_ELSE
+      ${compileStatements(ifStatement.elseStatements)}
+    label ${label}_END  
+  `;
+}
+function compileDoStatement(doStatement: DoStatement) {
+  return expandToNode`
+    ${compileExpression(doStatement.memberCall)}
+    pop temp 0`;
+}
+function compileReturnStatement(returnStatement: ReturnStatement) {
+  return expandToNode`
+  ${returnStatement.expression ? compileExpression(returnStatement.expression) : undefined}
+  Return`;
+}
+
+const binaryOperatorNames: Record<string, string> = {
+  "+": "add",
+  "-": "sub",
+};
+
+const unaryOperatorNames: Record<string, string> = {
+  "-": "neg",
+};
+
+function compileExpression(expression: Expression): CompositeGeneratorNode {
+  if (isBinaryExpression(expression)) {
+    return expandToNode`
+    ${compileExpression(expression.left)}
+    ${compileExpression(expression.right)}
+    ${binaryOperatorNames[expression.operator]}
+    `;
+  }
+  if (isUnaryExpression(expression)) {
+    return expandToNode`
+    ${compileExpression(expression.value)}
+    ${unaryOperatorNames[expression.operator]}
+    `;
+  }
+  if (isBooleanExpression(expression)) throw Error("Boolean expression not implemented");
+  if (isNumberExpression(expression)) {
+    return expandToNode`
+    push constant ${expression.value}`;
+  }
+  if (isThisExpression(expression)) {
+    return expandToNode`pointer 0`;
+  }
+  if (isMemberCall(expression)) {
+    return compileMemberCall(expression);
+  }
+
+  console.error("Unimplemented expression", expression);
+  throw Error("Unimplemented expression");
+}
+
+function compileMemberCall(memberCall: MemberCall) {
+  if (!memberCall.element) {
+    console.error("Unknown membercall", memberCall);
+    throw Error("Unknown membercall");
+  }
+  const namedElement = memberCall.element.ref;
+  if (!namedElement) {
+    console.error("Empty named element ref", namedElement);
+    throw Error("Unknown named element");
+  }
+
+  if (memberCall.explicitIndex) {
+    throw Error("Index member calls not implemented");
+  }
+
+  if (isSubroutineDec(namedElement)) {
+    // eg Math.min(1,2)
+    // eg a.dispose()
+    // eg mymethod()
+    if (memberCall.previous && isMemberCall(memberCall.previous)) {
+      const previous = memberCall.previous;
+      if (isClassDec(previous)) {
+        // eg Math.min
+        return compileMethodCall((previous as ClassDec).name + "." + namedElement.name, memberCall.arguments);
+      }
+      console.error("non local method calls unimplemented", memberCall);
+      throw Error();
+    } else {
+      // eg x + mymethod(2);
+      return compileMethodCall(namedElement.name, memberCall.arguments);
+    }
+  } else if (isVarName(namedElement)) {
+    return expandToNode`
+        push ${getSymbol(namedElement.name)}`;
+  } else {
+    console.error("Unknown member call", memberCall);
+    throw Error("Uknown membercall");
+  }
+}
+
+function compileMethodCall(name: string, parameters: Expression[]) {
+  return expandToNode`
+    ${joinToNode(parameters.map((p) => compileExpression(p)))}
+    call ${name} ${parameters.length}`;
+}
+
+export function generateHackVM(program: Program, filePath: string, destination: string | undefined): string {
+  const data = extractDestinationAndName(filePath, destination);
+  const generatedFilePath = `${path.join(data.destination, data.name)}.js`;
+
+  labelCount = 0;
+  const programNode = expandToNode`
+    // File ${destination}
+    ${compileClass(program.class)}
+  `;
+
+  if (!fs.existsSync(data.destination)) {
+    fs.mkdirSync(data.destination, { recursive: true });
+  }
+  fs.writeFileSync(generatedFilePath, toString(programNode));
+  return generatedFilePath;
+}

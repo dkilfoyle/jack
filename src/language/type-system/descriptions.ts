@@ -2,7 +2,9 @@ import { AstNode } from "langium";
 import { BooleanExpression, ClassDec, NumberExpression, StringExpression } from "../generated/ast.js";
 
 export type TypeDescription =
-  | NilTypeDescription
+  | NullTypeDescription
+  | AnyTypeDescription
+  | CharTypeDescription
   | VoidTypeDescription
   | BooleanTypeDescription
   | StringTypeDescription
@@ -12,18 +14,34 @@ export type TypeDescription =
   | ClassTypeDescription
   | ErrorType;
 
-export interface NilTypeDescription {
-  readonly $type: "nil";
+export interface NullTypeDescription {
+  readonly $type: "null";
 }
 
-export function createNilType(): NilTypeDescription {
+export function createNullType(): NullTypeDescription {
   return {
-    $type: "nil",
+    $type: "null",
   };
 }
 
-export function isNilType(item: TypeDescription): item is NilTypeDescription {
-  return item.$type === "nil";
+export function isNullType(item: TypeDescription): item is NullTypeDescription {
+  return item.$type === "null";
+}
+
+export interface AnyTypeDescription {
+  readonly $type: "any";
+  readonly literal: AstNode;
+}
+
+export function createAnyType(node: AstNode): AnyTypeDescription {
+  return {
+    $type: "any",
+    literal: node,
+  };
+}
+
+export function isAnyType(item: TypeDescription): item is AnyTypeDescription {
+  return item.$type === "any";
 }
 
 export interface VoidTypeDescription {
@@ -38,6 +56,20 @@ export function createVoidType(): VoidTypeDescription {
 
 export function isVoidType(item: TypeDescription): item is VoidTypeDescription {
   return item.$type === "void";
+}
+
+export interface CharTypeDescription {
+  readonly $type: "char";
+}
+
+export function createCharType(): CharTypeDescription {
+  return {
+    $type: "char",
+  };
+}
+
+export function isCharType(item: TypeDescription): item is CharTypeDescription {
+  return item.$type === "char";
 }
 
 export interface BooleanTypeDescription {

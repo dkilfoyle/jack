@@ -6,7 +6,7 @@ import {
   isClassDec,
   isSubroutineDec,
   isMemberCall,
-  isNilExpression,
+  isNullExpression,
   isNumberExpression,
   isParameter,
   isReturnStatement,
@@ -21,16 +21,19 @@ import {
   isVarName,
 } from "../generated/ast.js";
 import {
+  createAnyType,
   createBooleanType,
+  createCharType,
   createClassType,
   createErrorType,
   createFunctionType,
   createMethodType,
-  createNilType,
+  createNullType,
   createNumberType,
   createStringType,
   createVoidType,
   isFunctionType,
+  isMethodType,
   isStringType,
   TypeDescription,
 } from "./descriptions.js";
@@ -52,15 +55,17 @@ export function inferType(node: AstNode | undefined, cache: Map<AstNode, TypeDes
     type = createNumberType(node);
   } else if (isBooleanExpression(node)) {
     type = createBooleanType(node);
-  } else if (isNilExpression(node)) {
-    type = createNilType();
+  } else if (isNullExpression(node)) {
+    type = createNullType();
   } else if (isSubroutineDec(node)) {
     const returnType = inferType(node.returnType, cache);
     const parameters = node.parameters.map((e) => ({
       name: e.name,
       type: inferType(e.type, cache),
     }));
-    type = node.decType == "function" ? createFunctionType(returnType, parameters) : createMethodType(returnType, parameters);
+    if (node.decType == "function") type = createFunctionType(returnType, parameters);
+    if (node.decType == "method") type = createMethodType(returnType, parameters);
+    if (node.decType == "constructor") type = createMethodType(returnType, parameters);
   } else if (isVarTypeRef(node) || isReturnTypeRef(node)) {
     type = inferTypeRef(node, cache);
   } else if (isMemberCall(node)) {
@@ -108,7 +113,7 @@ function inferTypeRef(node: VarTypeRef | ReturnTypeRef, cache: Map<AstNode, Type
     if (node.primitive === "int") {
       return createNumberType();
     } else if (node.primitive === "char") {
-      return createStringType();
+      return createCharType();
     } else if (node.primitive === "boolean") {
       return createBooleanType();
     } else if (node.primitive === "void") {
@@ -123,17 +128,22 @@ function inferTypeRef(node: VarTypeRef | ReturnTypeRef, cache: Map<AstNode, Type
 }
 
 function inferMemberCall(node: MemberCall, cache: Map<AstNode, TypeDescription>): TypeDescription {
+  console.log("memberCall", node);
   const element = node.element?.ref;
+  if (element && node.explicitIndex) {
+    // console.log("inferMemberCall with index", element);
+    return createAnyType(element);
+  }
   if (element) {
     return inferType(element, cache);
   } else if (node.explicitOperationCall && node.previous) {
     const previousType = inferType(node.previous, cache);
-    if (isFunctionType(previousType)) {
+    if (isFunctionType(previousType) || isMethodType(previousType)) {
       return previousType.returnType;
     }
     return createErrorType("Cannot call operation on non-function type", node);
   }
-  return createErrorType("Could not infer type for element " + node.element?.$refText ?? "undefined", node);
+  return createErrorType("Could not infer type for element " + node.element?.$refText || "undefined", node);
 }
 
 function inferBinaryExpression(expr: BinaryExpression, cache: Map<AstNode, TypeDescription>): TypeDescription {

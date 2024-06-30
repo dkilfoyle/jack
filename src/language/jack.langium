@@ -29,9 +29,6 @@ Parameter:
 fragment SubroutineBody:
     "{"  varDec+=VarDec* statements+=Statement* "}";
 
-// VarDec returns NamedElement:
-// {infer VarDec} "var" type=Type name=ID ";"; //varNames+=VarName ("," varNames+=VarName)* ";";
-
 VarDec:
     "var" type=VarTypeRef varNames+=VarName ("," varNames+=VarName)* ";";
 
@@ -45,10 +42,12 @@ LetStatement:
     "let" varName=[NamedElement:ID] ("[" lhsIndexExpression=Expression "]")? "=" rhsExpression=Expression ";";
 
 IfStatement:
-    "if" name=ID;
+    "if" "(" testExpression=Expression ")"
+        "{" statements+=Statement* "}"
+    ("else" "{" elseStatements+=Statement* "}")?;
 
 WhileStatement:
-    "while" "(" expression=Expression ")" "{" statements+=Statement* "}";
+    "while" "(" testExpression=Expression ")" "{" statements+=Statement* "}";
 
 DoStatement:
     "do" memberCall=MemberCall ';';
@@ -96,7 +95,8 @@ Comparison infers Expression:
      StringExpression |
      BooleanExpression |
      NumberExpression |
-     NilExpression |
+     NullExpression |
+     ThisExpression |
      FeatureCall;
 
  FeatureCall infers Expression:
@@ -108,25 +108,21 @@ Comparison infers Expression:
  	    arguments+=Expression (',' arguments+=Expression)*
  	)?
  	')')?
-     (explicitIndex?='[' expression=Expression ']')?;
+     (explicitIndex?='[' indexExpression=Expression ']')?;
 
  UnaryExpression:
      operator=('!' | '-' | '+') value=Expression;
 
 NumberExpression:
     value=INT;
- StringExpression:
-     value=STRING;
- BooleanExpression:
-     value?='true' | 'false';
- NilExpression:
-     value='nil';
-
-// SubroutineCall:
-//     name=ID "(" ExpressionList ")" | (className=ID|varName=ID) "." methodName=ID "(" ExpressionList ")";
-
-// ExpressionList:
-//     (expressions+=Expression ("," expression+=Expression)*)?;
+StringExpression:
+    value=STRING;
+BooleanExpression:
+    value?='true' | 'false';
+NullExpression:
+    value='null';
+ThisExpression:
+    value="this";
 
 type NamedElement = VarName | Parameter | SubroutineDec | StaticClassVarDec | FieldClassVarDec | ClassDec;
 
