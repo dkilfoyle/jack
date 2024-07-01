@@ -16,7 +16,7 @@ import type { JackServices } from "./jack-module.js";
 import { inferType } from "./type-system/infer.js";
 import { isAssignable } from "./type-system/assignments.js";
 import { isLegalOperation } from "./type-system/operator.js";
-import { isErrorType, TypeDescription, typeToString } from "./type-system/descriptions.js";
+import { isClassType, isErrorType, isNumberType, TypeDescription, typeToString } from "./type-system/descriptions.js";
 
 /**
  * Register custom validation checks.
@@ -162,6 +162,19 @@ export class JackValidator {
         const subroutineDec = memberCall.element.ref;
         if (subroutineDec.decType == "method")
           accept("error", "Cannot use static call for method function", { node: memberCall, property: "element" });
+      }
+
+      // cannot index a non-array type
+      // var int i; let x = i[0]
+      if (memberCall.explicitIndex) {
+        const namedElementType = inferType(memberCall.element.ref, new Map());
+
+        if (!(isClassType(namedElementType) && namedElementType.literal.name == "Array"))
+          accept("error", "Cannot index a non-array type", { node: memberCall, property: "element" });
+
+        const indexType = inferType(memberCall.indexExpression, new Map());
+        if (!isNumberType(indexType))
+          accept("error", `Index type (${typeToString(indexType)}) is not a number`, { node: memberCall, property: "indexExpression" });
       }
     }
   }

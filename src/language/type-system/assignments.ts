@@ -1,6 +1,8 @@
-import { isCharType, isClassType, isNullType, isNumberType, TypeDescription } from "./descriptions.js";
+import { isAnyType, isCharType, isClassType, isNullType, isNumberType, TypeDescription } from "./descriptions.js";
 
 export function isAssignable(from: TypeDescription, to: TypeDescription): boolean {
+  if (isAnyType(from) || isAnyType(to)) return true;
+
   if (isClassType(from)) {
     // var Array a; var int b; let a=b;
     if (!isClassType(to)) {

@@ -40,6 +40,7 @@ Statement:
 
 LetStatement:
     "let" varName=[NamedElement:ID] ("[" lhsIndexExpression=Expression "]")? "=" rhsExpression=Expression ";";
+    //"let" lhsExpression=Expression ("[" lhsIndexExpression=Expression "]")? "=" rhsExpression=Expression ";";
 
 IfStatement:
     "if" "(" testExpression=Expression ")"

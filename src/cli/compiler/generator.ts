@@ -21,6 +21,7 @@ import {
   ReturnStatement,
   Statement,
   SubroutineDec,
+  VarName,
   WhileStatement,
   type ClassDec,
   type Program,
@@ -178,12 +179,23 @@ function compileStatements(statements: Statement[]) {
 }
 
 function compileLetStatement(letStatement: LetStatement) {
-  return expandToNode`
+  if (letStatement.lhsIndexExpression) {
+    return expandToNode`
+      // ${letStatement.$cstNode?.text}
+      push ${getSymbol(letStatement.varName.$refText)}
+      ${compileExpression(letStatement.lhsIndexExpression)}
+      add
+      ${compileExpression(letStatement.rhsExpression)}
+      pop ${getSymbol(letStatement.varName.$refText)}
+      `;
+  } else
+    return expandToNode`
     // ${letStatement.$cstNode?.text}
     ${compileExpression(letStatement.rhsExpression)}
     pop ${getSymbol(letStatement.varName.$refText)}
     `;
 }
+
 function compileWhileStatement(whileStatement: WhileStatement): CompositeGeneratorNode {
   const label = `LWHILE${labelCount++}`;
   return expandToNode`
@@ -271,7 +283,16 @@ function compileMemberCall(memberCall: MemberCall) {
   }
 
   if (memberCall.explicitIndex) {
-    throw Error("Index member calls not implemented");
+    if (!isVarName(namedElement)) {
+      console.error("indexing a namedElement which is not a varName", namedElement);
+      throw Error();
+    }
+    return expandToNode`
+      // ${memberCall.$cstNode?.text}
+      push ${getSymbol(namedElement.name)}
+      ${compileExpression(memberCall.indexExpression!)}
+      add
+      `;
   }
 
   if (isSubroutineDec(namedElement)) {
@@ -282,13 +303,20 @@ function compileMemberCall(memberCall: MemberCall) {
       const previous = memberCall.previous;
       if (isClassDec(previous)) {
         // eg Math.min
-        return compileMethodCall((previous as ClassDec).name + "." + namedElement.name, memberCall.arguments);
+        // or Array.new
+        if (namedElement.decType == "constructor")
+          return compileConstructorCall((previous as VarName).name, namedElement.name, memberCall.arguments);
+        else return compileFunctionCall((previous as ClassDec).name, namedElement.name, memberCall.arguments);
+      }
+      if (isVarName(previous)) {
+        // eg a.mymethod()
+        return compileMethodCall((previous as VarName).name, namedElement.name, memberCall.arguments);
       }
       console.error("non local method calls unimplemented", memberCall);
       throw Error();
     } else {
       // eg x + mymethod(2);
-      return compileMethodCall(namedElement.name, memberCall.arguments);
+      return compileMethodCall("this", namedElement.name, memberCall.arguments);
     }
   } else if (isVarName(namedElement)) {
     return expandToNode`
@@ -299,10 +327,28 @@ function compileMemberCall(memberCall: MemberCall) {
   }
 }
 
-function compileMethodCall(name: string, parameters: Expression[]) {
+function compileConstructorCall(className: string, methodName: string, parameters: Expression[]) {
   return expandToNode`
+    // ${className}.${methodName}(${parameters.map((p) => p.$cstNode?.text).join(", ")})
     ${joinToNode(parameters.map((p) => compileExpression(p)))}
-    call ${name} ${parameters.length}`;
+    call ${methodName} ${parameters.length}`;
+}
+
+function compileMethodCall(objectName: string, methodName: string, parameters: Expression[]) {
+  return expandToNode`
+    // ${objectName}.${methodName}(${parameters.map((p) => p.$cstNode?.text).join(", ")})
+    push ${getSymbol(objectName)}
+    pop pointer 0
+    ${joinToNode(parameters.map((p) => compileExpression(p)))}
+    call ${methodName} ${parameters.length + 1}`;
+}
+
+function compileFunctionCall(className: string, methodName: string, parameters: Expression[]) {
+  return expandToNode`
+    // ${className}.${methodName}(${parameters.map((p) => p.$cstNode?.text).join(", ")})
+    // TODO: ? handling of this
+    ${joinToNode(parameters.map((p) => compileExpression(p)))}
+    call ${methodName} ${parameters.length}`;
 }
 
 export function generateHackVM(program: Program, filePath: string, destination: string | undefined): string {
