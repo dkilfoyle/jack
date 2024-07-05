@@ -39,8 +39,8 @@ Statement:
     LetStatement | IfStatement | WhileStatement | DoStatement | ReturnStatement;
 
 LetStatement:
-    "let" varName=[NamedElement:ID] ("[" lhsIndexExpression=Expression "]")? "=" rhsExpression=Expression ";";
-    //"let" lhsExpression=Expression ("[" lhsIndexExpression=Expression "]")? "=" rhsExpression=Expression ";";
+    "let" lhs=MemberCall ("[" lhsIndexExpression=Expression "]")? "=" rhsExpression=Expression ";";
+    //"let" varName=[NamedElement:ID] ("[" lhsIndexExpression=Expression "]")? "=" rhsExpression=Expression ";";
 
 IfStatement:
     "if" "(" testExpression=Expression ")"
@@ -102,7 +102,7 @@ Comparison infers Expression:
 
  FeatureCall infers Expression:
      {infer MemberCall}
- 	(element=[NamedElement:ID] | element=[NamedElement:'this'] | element=[NamedElement:'super'])
+ 	(element=[NamedElement:ID] | element=[NamedElement:'this'])
      // Optional function call after referencing an element
      (explicitOperationCall?='('
  	(

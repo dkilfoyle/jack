@@ -27,7 +27,7 @@ export class JackScopeProvider extends DefaultScopeProvider {
             const varType = varDec.type.reference?.ref;
             if (varType) return this.scopeObjectClassMembers(varType);
           } else {
-            console.log("Unable to scope previousNamedElement", previousNamedElement);
+            console.error("Unable to scope previousNamedElement");
           }
         } else {
           // why? no previousNamedElement

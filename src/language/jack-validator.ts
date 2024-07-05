@@ -64,9 +64,9 @@ export class JackValidator {
   }
 
   checkVariableAssignmentAllowed(decl: LetStatement, accept: ValidationAcceptor): void {
-    if (decl.varName && decl.rhsExpression) {
+    if (decl.lhs && decl.rhsExpression) {
       const map = this.getTypeCache();
-      const left = inferType(decl.varName.ref, map);
+      const left = inferType(decl.lhs, map);
       const right = inferType(decl.rhsExpression, map);
       if (!(isErrorType(right) || isErrorType(left)) && !isAssignable(right, left)) {
         accept("error", `Type '${typeToString(right)}' is not assignable to type '${typeToString(left)}'.`, {
@@ -92,7 +92,6 @@ export class JackValidator {
     const right = inferType(binary.right, map);
     // console.log("binary operator", left, right);
     if (!isLegalOperation(binary.operator, left, right)) {
-      console.log(binary);
       accept("error", `Cannot perform operation '${binary.operator}' on values of type '${typeToString(left)}' and '${typeToString(right)}'.`, {
         node: binary,
       });

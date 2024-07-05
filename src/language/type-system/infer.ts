@@ -128,7 +128,7 @@ function inferTypeRef(node: VarTypeRef | ReturnTypeRef, cache: Map<AstNode, Type
 }
 
 function inferMemberCall(node: MemberCall, cache: Map<AstNode, TypeDescription>): TypeDescription {
-  console.log("memberCall", node);
+  // console.log("memberCall", node);
   const element = node.element?.ref;
   if (element && node.explicitIndex) {
     // console.log("inferMemberCall with index", element);

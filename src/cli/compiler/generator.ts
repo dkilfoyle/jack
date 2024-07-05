@@ -9,8 +9,10 @@ import {
   isIfStatement,
   isLetStatement,
   isMemberCall,
+  isNullExpression,
   isNumberExpression,
   isReturnStatement,
+  isStringExpression,
   isSubroutineDec,
   isThisExpression,
   isUnaryExpression,
@@ -21,7 +23,6 @@ import {
   ReturnStatement,
   Statement,
   SubroutineDec,
-  VarName,
   WhileStatement,
   type ClassDec,
   type Program,
@@ -31,6 +32,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { extractDestinationAndName } from "../cli-util.js";
 import { inferType } from "../../language/type-system/infer.js";
+import { charCodes } from "./charCodes.js";
 // import _ from "lodash";
 
 interface ClassSymbolTableEntry {
@@ -97,12 +99,12 @@ function buildMethodSymbolTable(subroutineDec: SubroutineDec) {
       kind: "argument",
       num: 0,
     }); // no this for constructors or functions
-  subroutineDec.parameters.forEach((p, i) => {
+  subroutineDec.parameters.forEach((p) => {
     methodSymbolTable.push({
       name: p.name,
       type: inferType(p.type, new Map()).$type,
       kind: "argument",
-      num: i + 1,
+      num: methodSymbolTable.length,
     });
   });
   subroutineDec.varDec.forEach((vd, i) => {
@@ -131,7 +133,7 @@ function compileClass(classDec: ClassDec) {
 }
 
 function getSubroutineName(subroutineDec: SubroutineDec) {
-  return `${(subroutineDec.$container as ClassDec).name}.${subroutineDec.name}(${subroutineDec.parameters.map((p) => p.name).join(", ")}`;
+  return `${(subroutineDec.$container as ClassDec).name}.${subroutineDec.name}`;
 }
 
 function printMethodSymbolTable(name: string) {
@@ -148,7 +150,7 @@ function compileMethod(subroutineDec: SubroutineDec) {
   if (!isClassDec(subroutineDec.$container)) throw Error();
   if (subroutineDec.decType == "constructor")
     return expandToNode`
-      function ${getSubroutineName(subroutineDec)}
+      function ${getSubroutineName(subroutineDec)} ${methodSymbolTable.filter((s) => s.kind == "local").length}
         ${printMethodSymbolTable(getSubroutineName(subroutineDec))}
         push constant ${classSymbolTable.filter((s) => s.kind == "this").length}
         call Memory.alloc 1
@@ -158,7 +160,7 @@ function compileMethod(subroutineDec: SubroutineDec) {
     `;
   else
     return expandToNode`
-      function ${getSubroutineName(subroutineDec)}
+      function ${getSubroutineName(subroutineDec)} ${methodSymbolTable.filter((s) => s.kind == "local").length}
         ${printMethodSymbolTable(getSubroutineName(subroutineDec))}
         ${compileStatements(subroutineDec.statements)}
       `;
@@ -182,17 +184,22 @@ function compileLetStatement(letStatement: LetStatement) {
   if (letStatement.lhsIndexExpression) {
     return expandToNode`
       // ${letStatement.$cstNode?.text}
-      push ${getSymbol(letStatement.varName.$refText)}
+      ${compileExpression(letStatement.lhs)}
       ${compileExpression(letStatement.lhsIndexExpression)}
       add
       ${compileExpression(letStatement.rhsExpression)}
-      pop ${getSymbol(letStatement.varName.$refText)}
+      pop pointer 1 // THAT = address rhs
+      push that 0   // stack top = rhs
+      pop temp 0    // temp - = rhs
+      pop pointer 1 // THAT = address lhs
+      push temp 0   // stack top = rhs
+      pop that 0    // lhs = rhs
       `;
   } else
     return expandToNode`
     // ${letStatement.$cstNode?.text}
     ${compileExpression(letStatement.rhsExpression)}
-    pop ${getSymbol(letStatement.varName.$refText)}
+    pop ${getSymbol(letStatement.lhs.$cstNode!.text)}
     `;
 }
 
@@ -228,13 +235,15 @@ function compileDoStatement(doStatement: DoStatement) {
 }
 function compileReturnStatement(returnStatement: ReturnStatement) {
   return expandToNode`
-  ${returnStatement.expression ? compileExpression(returnStatement.expression) : undefined}
-  Return`;
+  ${returnStatement.expression ? compileExpression(returnStatement.expression) : "push constant 0"}
+  return`;
 }
 
 const binaryOperatorNames: Record<string, string> = {
   "+": "add",
   "-": "sub",
+  "*": "call Math.multiply 2",
+  "/": "call Math.divider 2",
 };
 
 const unaryOperatorNames: Record<string, string> = {
@@ -255,16 +264,42 @@ function compileExpression(expression: Expression): CompositeGeneratorNode {
     ${unaryOperatorNames[expression.operator]}
     `;
   }
-  if (isBooleanExpression(expression)) throw Error("Boolean expression not implemented");
+  if (isBooleanExpression(expression)) {
+    if (expression.value)
+      return expandToNode`
+      push constant 1
+      neg`;
+    else
+      return expandToNode`
+      push constant 0`;
+  }
   if (isNumberExpression(expression)) {
     return expandToNode`
     push constant ${expression.value}`;
   }
   if (isThisExpression(expression)) {
-    return expandToNode`pointer 0`;
+    return expandToNode`push pointer 0`;
+  }
+  if (isNullExpression(expression)) {
+    return expandToNode`push constant 0`;
   }
   if (isMemberCall(expression)) {
     return compileMemberCall(expression);
+  }
+  if (isStringExpression(expression)) {
+    return expandToNode`
+    // "${expression.value}"
+    push constant ${expression.value.length}
+    call String.new 1
+    ${joinToNode(
+      expression.value.split("").map(
+        (c) => expandToNode`
+      push constant ${charCodes[c]}
+      call String.appendChar 1
+    `
+      )
+    )}
+    `;
   }
 
   console.error("Unimplemented expression", expression);
@@ -300,19 +335,18 @@ function compileMemberCall(memberCall: MemberCall) {
     // eg a.dispose()
     // eg mymethod()
     if (memberCall.previous && isMemberCall(memberCall.previous)) {
-      const previous = memberCall.previous;
-      if (isClassDec(previous)) {
+      const previousElement = memberCall.previous.element?.ref;
+      if (isClassDec(previousElement)) {
         // eg Math.min
         // or Array.new
-        if (namedElement.decType == "constructor")
-          return compileConstructorCall((previous as VarName).name, namedElement.name, memberCall.arguments);
-        else return compileFunctionCall((previous as ClassDec).name, namedElement.name, memberCall.arguments);
+        if (namedElement.decType == "constructor") return compileConstructorCall(previousElement.name, namedElement.name, memberCall.arguments);
+        else return compileFunctionCall(previousElement.name, namedElement.name, memberCall.arguments);
       }
-      if (isVarName(previous)) {
+      if (isVarName(previousElement)) {
         // eg a.mymethod()
-        return compileMethodCall((previous as VarName).name, namedElement.name, memberCall.arguments);
+        return compileMethodCall(previousElement.name, namedElement.name, memberCall.arguments);
       }
-      console.error("non local method calls unimplemented", memberCall);
+      console.error("non local method calls unimplemented", memberCall.previous.$type, memberCall.previous.$cstNode?.text);
       throw Error();
     } else {
       // eg x + mymethod(2);
@@ -348,7 +382,7 @@ function compileFunctionCall(className: string, methodName: string, parameters: 
     // ${className}.${methodName}(${parameters.map((p) => p.$cstNode?.text).join(", ")})
     // TODO: ? handling of this
     ${joinToNode(parameters.map((p) => compileExpression(p)))}
-    call ${methodName} ${parameters.length}`;
+    call ${className}.${methodName} ${parameters.length}`;
 }
 
 export function generateHackVM(program: Program, filePath: string, destination: string | undefined): string {

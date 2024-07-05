@@ -7,7 +7,7 @@ import { isClassDec, isFieldClassVarDec, isStaticClassVarDec, isVarDec, isVarNam
 
 export class JackNodeKindProvider implements NodeKindProvider {
   getSymbolKind(node: AstNode | AstNodeDescription): SymbolKind {
-    console.log("get symbol kind", node);
+    // console.log("get symbol kind", node);
     return SymbolKind.Field;
   }
   getCompletionItemKind(node: AstNode | AstNodeDescription): CompletionItemKind {
@@ -31,7 +31,7 @@ export class JackNodeKindProvider implements NodeKindProvider {
       case n.$type == "keyword":
         return CompletionItemKind.Keyword;
       default:
-        console.log("Unimplemented nodekind ", n);
+        console.log("Unimplemented nodekind ");
     }
     return CompletionItemKind.Reference;
   }
