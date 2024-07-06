@@ -2,11 +2,10 @@ import { AstNode, AstUtils, type ValidationAcceptor, type ValidationChecks } fro
 import {
   BinaryExpression,
   isClassDec,
-  isMemberCall,
   isReturnStatement,
   isSubroutineDec,
   LetStatement,
-  MemberCall,
+  NamedFeature,
   SubroutineDec,
   UnaryExpression,
   type ClassDec,
@@ -16,7 +15,7 @@ import type { JackServices } from "./jack-module.js";
 import { inferType } from "./type-system/infer.js";
 import { isAssignable } from "./type-system/assignments.js";
 import { isLegalOperation } from "./type-system/operator.js";
-import { isClassType, isErrorType, isNumberType, TypeDescription, typeToString } from "./type-system/descriptions.js";
+import { isErrorType, TypeDescription, typeToString } from "./type-system/descriptions.js";
 
 /**
  * Register custom validation checks.
@@ -26,7 +25,7 @@ export function registerValidationChecks(services: JackServices) {
   const validator = services.validation.JackValidator;
   const checks: ValidationChecks<JackAstType> = {
     ClassDec: [validator.checkClassNameStartsWithCapital, validator.checkValidClassConstructor],
-    MemberCall: validator.checkValidMemberCall,
+    NamedFeature: validator.checkValidNamedFeature,
     SubroutineDec: [validator.checkSubroutineEndsWithReturn, validator.checkSubroutineReturnsCorrectType],
     BinaryExpression: validator.checkBinaryOperationAllowed,
     UnaryExpression: validator.checkUnaryOperationAllowed,
@@ -144,38 +143,45 @@ export class JackValidator {
       }
     }
   }
-  checkValidMemberCall(memberCall: MemberCall, accept: ValidationAcceptor): void {
+  checkValidNamedFeature(feature: NamedFeature, accept: ValidationAcceptor): void {
     // console.log("memberCall", memberCall);
-    if (memberCall.element?.ref) {
-      // cannot call local method from static function
-      // function int caller() { do localMethod() } == NO but {do myObject.method() } == OK
-      if (isSubroutineDec(memberCall.element.ref) && !isMemberCall(memberCall.previous)) {
-        const caller = AstUtils.getContainerOfType(memberCall, isSubroutineDec);
-        if (caller?.decType == "function")
-          accept("error", "Cannot call own class method from static function", { node: memberCall, property: "element" });
+
+    // cannot call local method from static function
+    // function int caller() { do localMethod() } == NO but {do myObject.method() } == OK
+    if (!feature.calledSubroutine) {
+      // a or a()
+      if (isSubroutineDec(feature.element.ref)) {
+        // a()
+
+        // cannot call local method from static function
+        // function int caller() { do localMethod() } == NO but {do myObject.method() } == OK
+        const caller = AstUtils.getContainerOfType(feature, isSubroutineDec);
+        if (caller?.decType == "function" && feature.element.ref.decType == "method")
+          accept("error", "Cannot call local method from static function", { node: feature, property: "calledSubroutine" });
       }
-
-      // cannot call method from Class
-      // Array.dispose() = NO (dispose is a method)
-      if (isSubroutineDec(memberCall.element.ref) && isMemberCall(memberCall.previous) && isClassDec(memberCall.previous?.element?.ref)) {
-        const subroutineDec = memberCall.element.ref;
-        if (subroutineDec.decType == "method")
-          accept("error", "Cannot use static call for method function", { node: memberCall, property: "element" });
-      }
-
-      // cannot index a non-array type
-      // var int i; let x = i[0]
-      if (memberCall.explicitIndex) {
-        const namedElementType = inferType(memberCall.element.ref, new Map());
-
-        if (!(isClassType(namedElementType) && namedElementType.literal.name == "Array"))
-          accept("error", "Cannot index a non-array type", { node: memberCall, property: "element" });
-
-        const indexType = inferType(memberCall.indexExpression, new Map());
-        if (!isNumberType(indexType))
-          accept("error", `Index type (${typeToString(indexType)}) is not a number`, { node: memberCall, property: "indexExpression" });
+    } else {
+      // a.b()
+      if (isClassDec(feature.element.ref)) {
+        if (feature.calledSubroutine!.ref?.decType == "method") {
+          // cannot call method from Class
+          // Array.dispose() = NO (dispose is a method)
+          accept("error", "Cannot call method directly from class", { node: feature, property: "calledSubroutine" });
+        }
       }
     }
+
+    // // cannot index a non-array type
+    // // var int i; let x = i[0]
+    // if (memberCall.explicitIndex) {
+    //   const namedElementType = inferType(memberCall.element.ref, new Map());
+
+    //   if (!(isClassType(namedElementType) && namedElementType.literal.name == "Array"))
+    //     accept("error", "Cannot index a non-array type", { node: memberCall, property: "element" });
+
+    //   const indexType = inferType(memberCall.indexExpression, new Map());
+    //   if (!isNumberType(indexType))
+    //     accept("error", `Index type (${typeToString(indexType)}) is not a number`, { node: memberCall, property: "indexExpression" });
+    // }
   }
 
   checkSubroutineEndsWithReturn(subroutineDec: SubroutineDec, accept: ValidationAcceptor): void {

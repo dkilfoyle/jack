@@ -3,29 +3,30 @@ import {
   Expression,
   IfStatement,
   isBinaryExpression,
-  isBooleanExpression,
+  isBooleanConstant,
   isClassDec,
   isDoStatement,
   isIfStatement,
   isLetStatement,
-  isMemberCall,
-  isNullExpression,
-  isNumberExpression,
+  isNamedFeature,
+  isNullConstant,
+  isNumberConstant,
   isReturnStatement,
-  isStringExpression,
+  isStringConstant,
   isSubroutineDec,
-  isThisExpression,
+  isThisConstant,
   isUnaryExpression,
   isVarName,
   isWhileStatement,
   LetStatement,
-  MemberCall,
+  NamedFeature,
+  Program,
   ReturnStatement,
   Statement,
   SubroutineDec,
+  VarName,
   WhileStatement,
   type ClassDec,
-  type Program,
 } from "../../language/generated/ast.js";
 import { CompositeGeneratorNode, expandToNode, joinToNode, toString } from "langium/generate";
 import * as fs from "node:fs";
@@ -181,26 +182,27 @@ function compileStatements(statements: Statement[]) {
 }
 
 function compileLetStatement(letStatement: LetStatement) {
-  if (letStatement.lhsIndexExpression) {
-    return expandToNode`
-      // ${letStatement.$cstNode?.text}
-      ${compileExpression(letStatement.lhs)}
-      ${compileExpression(letStatement.lhsIndexExpression)}
-      add
-      ${compileExpression(letStatement.rhsExpression)}
-      pop pointer 1 // THAT = address rhs
-      push that 0   // stack top = rhs
-      pop temp 0    // temp - = rhs
-      pop pointer 1 // THAT = address lhs
-      push temp 0   // stack top = rhs
-      pop that 0    // lhs = rhs
-      `;
-  } else
-    return expandToNode`
-    // ${letStatement.$cstNode?.text}
-    ${compileExpression(letStatement.rhsExpression)}
-    pop ${getSymbol(letStatement.lhs.$cstNode!.text)}
-    `;
+  // if (letStatement.lhsIndexExpression) {
+  //   return expandToNode`
+  //     // ${letStatement.$cstNode?.text}
+  //     ${compileExpression(letStatement.lhs)}
+  //     ${compileExpression(letStatement.lhsIndexExpression)}
+  //     add
+  //     ${compileExpression(letStatement.rhsExpression)}
+  //     pop pointer 1 // THAT = address rhs
+  //     push that 0   // stack top = rhs
+  //     pop temp 0    // temp - = rhs
+  //     pop pointer 1 // THAT = address lhs
+  //     push temp 0   // stack top = rhs
+  //     pop that 0    // lhs = rhs
+  //     `;
+  // } else
+  //   return expandToNode`
+  //   // ${letStatement.$cstNode?.text}
+  //   ${compileExpression(letStatement.rhsExpression)}
+  //   pop ${getSymbol(letStatement.lhs.$cstNode!.text)}
+  //   `;
+  return expandToNode`// TODO let statment and array indexing`;
 }
 
 function compileWhileStatement(whileStatement: WhileStatement): CompositeGeneratorNode {
@@ -230,7 +232,7 @@ function compileIfStatement(ifStatement: IfStatement): CompositeGeneratorNode {
 }
 function compileDoStatement(doStatement: DoStatement) {
   return expandToNode`
-    ${compileExpression(doStatement.memberCall)}
+    ${compileExpression(doStatement.subroutineCall)}
     pop temp 0`;
 }
 function compileReturnStatement(returnStatement: ReturnStatement) {
@@ -264,7 +266,7 @@ function compileExpression(expression: Expression): CompositeGeneratorNode {
     ${unaryOperatorNames[expression.operator]}
     `;
   }
-  if (isBooleanExpression(expression)) {
+  if (isBooleanConstant(expression)) {
     if (expression.value)
       return expandToNode`
       push constant 1
@@ -273,20 +275,23 @@ function compileExpression(expression: Expression): CompositeGeneratorNode {
       return expandToNode`
       push constant 0`;
   }
-  if (isNumberExpression(expression)) {
+  if (isNumberConstant(expression)) {
     return expandToNode`
     push constant ${expression.value}`;
   }
-  if (isThisExpression(expression)) {
+  if (isThisConstant(expression)) {
     return expandToNode`push pointer 0`;
   }
-  if (isNullExpression(expression)) {
+  if (isNullConstant(expression)) {
     return expandToNode`push constant 0`;
   }
-  if (isMemberCall(expression)) {
-    return compileMemberCall(expression);
+  if (isNamedFeature(expression)) {
+    return compileNamedFeature(expression);
   }
-  if (isStringExpression(expression)) {
+  // if (isVariable(expression)) {
+  //   return compileVariable(expression);
+  // }
+  if (isStringConstant(expression)) {
     return expandToNode`
     // "${expression.value}"
     push constant ${expression.value.length}
@@ -306,59 +311,51 @@ function compileExpression(expression: Expression): CompositeGeneratorNode {
   throw Error("Unimplemented expression");
 }
 
-function compileMemberCall(memberCall: MemberCall) {
-  if (!memberCall.element) {
-    console.error("Unknown membercall", memberCall);
-    throw Error("Unknown membercall");
-  }
-  const namedElement = memberCall.element.ref;
-  if (!namedElement) {
-    console.error("Empty named element ref", namedElement);
-    throw Error("Unknown named element");
-  }
-
-  if (memberCall.explicitIndex) {
-    if (!isVarName(namedElement)) {
-      console.error("indexing a namedElement which is not a varName", namedElement);
-      throw Error();
-    }
-    return expandToNode`
-      // ${memberCall.$cstNode?.text}
-      push ${getSymbol(namedElement.name)}
-      ${compileExpression(memberCall.indexExpression!)}
-      add
-      `;
-  }
-
-  if (isSubroutineDec(namedElement)) {
-    // eg Math.min(1,2)
-    // eg a.dispose()
-    // eg mymethod()
-    if (memberCall.previous && isMemberCall(memberCall.previous)) {
-      const previousElement = memberCall.previous.element?.ref;
-      if (isClassDec(previousElement)) {
-        // eg Math.min
-        // or Array.new
-        if (namedElement.decType == "constructor") return compileConstructorCall(previousElement.name, namedElement.name, memberCall.arguments);
-        else return compileFunctionCall(previousElement.name, namedElement.name, memberCall.arguments);
-      }
-      if (isVarName(previousElement)) {
-        // eg a.mymethod()
-        return compileMethodCall(previousElement.name, namedElement.name, memberCall.arguments);
-      }
-      console.error("non local method calls unimplemented", memberCall.previous.$type, memberCall.previous.$cstNode?.text);
-      throw Error();
+function compileNamedFeature(feature: NamedFeature) {
+  if (isVarName(feature.element.ref)) {
+    // a or a.method()
+    const subroutineDec = feature.calledSubroutine?.ref;
+    if (isSubroutineDec(subroutineDec)) {
+      // a.method
+      return compileMethodCall(feature.element.ref.name, subroutineDec.name, feature.arguments);
     } else {
-      // eg x + mymethod(2);
-      return compileMethodCall("this", namedElement.name, memberCall.arguments);
+      // a
+      return compileVariable(feature.element.ref);
     }
-  } else if (isVarName(namedElement)) {
-    return expandToNode`
-        push ${getSymbol(namedElement.name)}`;
+  } else if (isSubroutineDec(feature.element.ref)) {
+    // a()
+    return compileMethodCall("this", feature.element.ref.name, feature.arguments);
+  } else if (isClassDec(feature.element.ref)) {
+    // Class.a()
+    const subroutineDec = feature.calledSubroutine?.ref;
+    if (isSubroutineDec(subroutineDec)) {
+      if (subroutineDec.decType == "constructor")
+        return compileConstructorCall(feature.element.ref.name, subroutineDec.name, feature.arguments);
+      else return compileFunctionCall(feature.element.ref.name, subroutineDec.name, feature.arguments);
+    } else throw Error();
   } else {
-    console.error("Unknown member call", memberCall);
-    throw Error("Uknown membercall");
+    throw Error();
   }
+
+  // if (memberCall.explicitIndex) {
+  //   if (!isVarName(namedElement)) {
+  //     console.error("indexing a namedElement which is not a varName", namedElement);
+  //     throw Error();
+  //   }
+  //   return expandToNode`
+  //     // ${memberCall.$cstNode?.text}
+  //     push ${getSymbol(namedElement.name)}
+  //     ${compileExpression(memberCall.indexExpression!)}
+  //     add
+  //     `;
+  // }
+}
+
+function compileVariable(variable: VarName) {
+  // TODO: implement array indexing
+  return expandToNode`
+        // TODO: implement array index
+        push ${getSymbol(variable.name)}`;
 }
 
 function compileConstructorCall(className: string, methodName: string, parameters: Expression[]) {

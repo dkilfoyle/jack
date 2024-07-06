@@ -9,7 +9,7 @@ import {
   ParameterInformation,
   SignatureHelpOptions,
 } from "vscode-languageserver";
-import { isMemberCall, isSubroutineDec } from "./generated/ast.js";
+import { isNamedFeature } from "./generated/ast.js";
 import { parse as commentParser } from "comment-parser";
 import * as _ from "lodash";
 
@@ -35,7 +35,7 @@ export class JackSignatureHelpProvider extends AbstractSignatureHelpProvider {
       const curOffset = document.textDocument.offsetAt(params.position);
       const nodeAt = CstUtils.findLeafNodeAtOffset(cst, curOffset)?.astNode;
       // console.log("Node At", nodeAt);
-      if (isMemberCall(nodeAt)) {
+      if (isNamedFeature(nodeAt)) {
         if (params.context?.triggerCharacter == ")") {
           this.currentSignatureStack.pop();
           return _.last(this.currentSignatureStack);
@@ -87,11 +87,10 @@ export class JackSignatureHelpProvider extends AbstractSignatureHelpProvider {
   protected override getSignatureFromElement(element: AstNode, cancelToken: CancellationToken): MaybePromise<SignatureHelp | undefined> {
     const signatures: SignatureInformation[] = [];
     let activeParameter = 0;
-    if (isMemberCall(element) && element.element?.$nodeDescription) {
-      const node = element.element.$nodeDescription;
+    if (isNamedFeature(element) && element.calledSubroutine) {
+      const subroutineDec = element.calledSubroutine.ref;
       activeParameter = element.arguments.length;
-      if (isSubroutineDec(node.node)) {
-        const subroutineDec = node.node;
+      if (subroutineDec) {
         const jsdoc = commentParser(this.commentProvider.getComment(subroutineDec) || "");
         const paramDocs: (string | undefined)[] = [];
         let signatureDocumentation;
@@ -109,7 +108,7 @@ export class JackSignatureHelpProvider extends AbstractSignatureHelpProvider {
           return ParameterInformation.create([start, end], paramDocs[i]);
         });
         signatures.push(SignatureInformation.create(title + ")", signatureDocumentation, ...params));
-      }
+      } else console.error("Unknown");
     }
     // console.log("getSignature", element, signatures, activeParameter);
     const newSignature = { signatures, activeParameter, activeSignature: 0 };

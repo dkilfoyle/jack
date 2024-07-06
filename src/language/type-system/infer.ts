@@ -2,38 +2,36 @@ import { AstNode } from "langium";
 import {
   BinaryExpression,
   isBinaryExpression,
-  isBooleanExpression,
+  isBooleanConstant,
   isClassDec,
   isSubroutineDec,
-  isMemberCall,
-  isNullExpression,
-  isNumberExpression,
+  isNullConstant,
+  isNumberConstant,
   isParameter,
   isReturnStatement,
-  isStringExpression,
+  isStringConstant,
   isUnaryExpression,
   isVarDec,
-  MemberCall,
   VarTypeRef,
   ReturnTypeRef,
   isReturnTypeRef,
   isVarTypeRef,
   isVarName,
+  isNamedFeature,
+  NamedFeature,
 } from "../generated/ast.js";
 import {
-  createAnyType,
+  // createAnyType,
   createBooleanType,
   createCharType,
   createClassType,
   createErrorType,
-  createFunctionType,
-  createMethodType,
   createNullType,
   createNumberType,
   createStringType,
   createVoidType,
-  isFunctionType,
-  isMethodType,
+  // isFunctionType,
+  // isMethodType,
   isStringType,
   TypeDescription,
 } from "./descriptions.js";
@@ -49,32 +47,18 @@ export function inferType(node: AstNode | undefined, cache: Map<AstNode, TypeDes
   }
   // Prevent recursive inference errors
   cache.set(node, createErrorType("Recursive definition", node));
-  if (isStringExpression(node)) {
+  if (isStringConstant(node)) {
     type = createStringType(node);
-  } else if (isNumberExpression(node)) {
+  } else if (isNumberConstant(node)) {
     type = createNumberType(node);
-  } else if (isBooleanExpression(node)) {
+  } else if (isBooleanConstant(node)) {
     type = createBooleanType(node);
-  } else if (isNullExpression(node)) {
+  } else if (isNullConstant(node)) {
     type = createNullType();
-  } else if (isSubroutineDec(node)) {
-    const returnType = inferType(node.returnType, cache);
-    const parameters = node.parameters.map((e) => ({
-      name: e.name,
-      type: inferType(e.type, cache),
-    }));
-    if (node.decType == "function") type = createFunctionType(returnType, parameters);
-    if (node.decType == "method") type = createMethodType(returnType, parameters);
-    if (node.decType == "constructor") type = createMethodType(returnType, parameters);
   } else if (isVarTypeRef(node) || isReturnTypeRef(node)) {
     type = inferTypeRef(node, cache);
-  } else if (isMemberCall(node)) {
-    type = inferMemberCall(node, cache);
-    if (node.explicitOperationCall) {
-      if (isFunctionType(type)) {
-        type = type.returnType;
-      }
-    }
+  } else if (isNamedFeature(node)) {
+    type = inferNamedFeature(node, cache);
   } else if (isVarDec(node)) {
     type = inferType(node.type, cache);
   } else if (isVarName(node)) {
@@ -127,23 +111,26 @@ function inferTypeRef(node: VarTypeRef | ReturnTypeRef, cache: Map<AstNode, Type
   return createErrorType("Could not infer type for this reference", node);
 }
 
-function inferMemberCall(node: MemberCall, cache: Map<AstNode, TypeDescription>): TypeDescription {
+function inferNamedFeature(node: NamedFeature, cache: Map<AstNode, TypeDescription>): TypeDescription {
   // console.log("memberCall", node);
   const element = node.element?.ref;
-  if (element && node.explicitIndex) {
-    // console.log("inferMemberCall with index", element);
-    return createAnyType(element);
+  if (isClassDec(element)) {
+    // Class.function
+    const func = node.calledSubroutine?.ref;
+    if (isSubroutineDec(func)) {
+      return inferType(func, cache);
+    } else return createErrorType("Expecting static function after class", node);
+  } else if (isSubroutineDec(element)) {
+    // mymethod()
+    if (node.calledSubroutine) return createErrorType("Cannot chain subroutines", node); // cant do mymethod().something()
+    return inferType(node.calledSubroutine, cache);
+  } else if (isVarName(element)) {
+    // a or a.method
+    if (node.calledSubroutine) {
+      return inferType(node.calledSubroutine.ref, cache);
+    } else return inferType(element, cache);
   }
-  if (element) {
-    return inferType(element, cache);
-  } else if (node.explicitOperationCall && node.previous) {
-    const previousType = inferType(node.previous, cache);
-    if (isFunctionType(previousType) || isMethodType(previousType)) {
-      return previousType.returnType;
-    }
-    return createErrorType("Cannot call operation on non-function type", node);
-  }
-  return createErrorType("Could not infer type for element " + node.element?.$refText || "undefined", node);
+  return createErrorType("Could not infer type for element " + node.$cstNode?.text || "undefined", node);
 }
 
 function inferBinaryExpression(expr: BinaryExpression, cache: Map<AstNode, TypeDescription>): TypeDescription {
@@ -163,14 +150,3 @@ function inferBinaryExpression(expr: BinaryExpression, cache: Map<AstNode, TypeD
   }
   return createErrorType("Could not infer type from binary expression", expr);
 }
-
-// export function getClassChain(classItem: ClassDec): ClassDec[] {
-//   const set = new Set<ClassDec>();
-//   let value: ClassDec | undefined = classItem;
-//   while (value && !set.has(value)) {
-//     set.add(value);
-//     value = value.superClass?.ref;
-//   }
-//   // Sets preserve insertion order
-//   return Array.from(set);
-// }

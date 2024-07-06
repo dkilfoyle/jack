@@ -39,7 +39,7 @@ Statement:
     LetStatement | IfStatement | WhileStatement | DoStatement | ReturnStatement;
 
 LetStatement:
-    "let" lhs=MemberCall ("[" lhsIndexExpression=Expression "]")? "=" rhsExpression=Expression ";";
+    "let" lhs=NamedFeature "=" rhsExpression=Expression ";";
     //"let" varName=[NamedElement:ID] ("[" lhsIndexExpression=Expression "]")? "=" rhsExpression=Expression ";";
 
 IfStatement:
@@ -51,7 +51,7 @@ WhileStatement:
     "while" "(" testExpression=Expression ")" "{" statements+=Statement* "}";
 
 DoStatement:
-    "do" memberCall=MemberCall ';';
+    "do" subroutineCall=NamedFeature ';';
 
 ReturnStatement:
     "return" (expression=Expression)? ";";
@@ -69,60 +69,37 @@ Logical infers Expression:
     Comparison ({infer BinaryExpression.left=current} operator=('and' | 'or') right=Comparison)*;
 
 Comparison infers Expression:
-    MemberCall ({infer BinaryExpression.left=current} operator=('<' | '<=' | '>' | '>=' | '==' | '!=') right=MemberCall)*;
+    Term ({infer BinaryExpression.left=current} operator=('<' | '<=' | '>' | '>=' | '==' | '!=') right=Term)*;
 
- MemberCall infers Expression:
-     Primary
- 	({infer MemberCall.previous=current} 
-     // Member call with function call
-         ("." element=[NamedElement:ID] (
- 		explicitOperationCall?='('
- 		(
- 		    arguments+=Expression (',' arguments+=Expression)*
- 		)?
- 		')')? 
-     // Chained function call
-         | (
- 		explicitOperationCall?='('
- 		(
- 		    arguments+=Expression (',' arguments+=Expression)*
- 		)?
- 		')'))
-     )*;
-
- Primary infers Expression:
-     '(' Expression ')' |
+Term infers Expression:
+    '(' Expression ')' |
      UnaryExpression |
-     StringExpression |
-     BooleanExpression |
-     NumberExpression |
-     NullExpression |
-     ThisExpression |
-     FeatureCall;
+     StringConstant |
+     BooleanConstant |
+     NumberConstant |
+     NullConstant |
+     ThisConstant |
+     NamedFeature;
 
- FeatureCall infers Expression:
-     {infer MemberCall}
- 	(element=[NamedElement:ID] | element=[NamedElement:'this'])
-     // Optional function call after referencing an element
-     (explicitOperationCall?='('
- 	(
- 	    arguments+=Expression (',' arguments+=Expression)*
- 	)?
- 	')')?
-     (explicitIndex?='[' indexExpression=Expression ']')?;
+NamedFeature:
+    // x.y = object.method or class.function
+    // x = method() or function() or varname/field/parameter or varname[index]
+    element = [NamedElement:ID]
+    ("." calledSubroutine=[SubroutineDec:ID] "(" (arguments+=Expression (',' arguments+=Expression)*)? ")")?
+    ("[" indexExpression=Expression "]")?;
 
  UnaryExpression:
      operator=('!' | '-' | '+') value=Expression;
 
-NumberExpression:
+NumberConstant:
     value=INT;
-StringExpression:
+StringConstant:
     value=STRING;
-BooleanExpression:
+BooleanConstant:
     value?='true' | 'false';
-NullExpression:
+NullConstant:
     value='null';
-ThisExpression:
+ThisConstant:
     value="this";
 
 type NamedElement = VarName | Parameter | SubroutineDec | StaticClassVarDec | FieldClassVarDec | ClassDec;

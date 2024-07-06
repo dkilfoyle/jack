@@ -10,7 +10,7 @@ export class JackCompletionProvider extends DefaultCompletionProvider {
     this.documents = services.shared.workspace.LangiumDocuments;
   }
   protected override completionFor(context: CompletionContext, next: NextFeature, acceptor: CompletionAcceptor): MaybePromise<void> {
-    // console.log("completion for ", context, next, context.document.precomputedScopes, context.);
+    console.log("completion for ", context, next, context.document.precomputedScopes);
 
     // if (isSubroutineDec(context.node) && isParameter(next.feature)) {
     //   acceptor(context, {

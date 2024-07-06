@@ -1,5 +1,5 @@
 import { AstNode } from "langium";
-import { BooleanExpression, ClassDec, NumberExpression, StringExpression } from "../generated/ast.js";
+import { BooleanConstant, ClassDec, NumberConstant, StringConstant } from "../generated/ast.js";
 
 export type TypeDescription =
   | NullTypeDescription
@@ -74,10 +74,10 @@ export function isCharType(item: TypeDescription): item is CharTypeDescription {
 
 export interface BooleanTypeDescription {
   readonly $type: "boolean";
-  readonly literal?: BooleanExpression;
+  readonly literal?: BooleanConstant;
 }
 
-export function createBooleanType(literal?: BooleanExpression): BooleanTypeDescription {
+export function createBooleanType(literal?: BooleanConstant): BooleanTypeDescription {
   return {
     $type: "boolean",
     literal,
@@ -90,10 +90,10 @@ export function isBooleanType(item: TypeDescription): item is BooleanTypeDescrip
 
 export interface StringTypeDescription {
   readonly $type: "string";
-  readonly literal?: StringExpression;
+  readonly literal?: StringConstant;
 }
 
-export function createStringType(literal?: StringExpression): StringTypeDescription {
+export function createStringType(literal?: StringConstant): StringTypeDescription {
   return {
     $type: "string",
     literal,
@@ -106,10 +106,10 @@ export function isStringType(item: TypeDescription): item is StringTypeDescripti
 
 export interface NumberTypeDescription {
   readonly $type: "number";
-  readonly literal?: NumberExpression;
+  readonly literal?: NumberConstant;
 }
 
-export function createNumberType(literal?: NumberExpression): NumberTypeDescription {
+export function createNumberType(literal?: NumberConstant): NumberTypeDescription {
   return {
     $type: "number",
     literal,

@@ -6,6 +6,8 @@ addMonacoStyles("monaco-editor-styles");
 const code = `// Inputs some numbers and computes their average
 class Main {
    function void main() {
+      var int a;
+      let a = Math.min(1,2);
       do Output.printInt(1 + (2 * 3));
       return;
    }
