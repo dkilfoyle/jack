@@ -1,0 +1,17 @@
+#root {
+  margin: 0;
+  /* overflow: hidden; */
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+}
+
+body {
+  margin: 0;
+}
+
+#monaco-editor-root {
+  height: 100%;
+  width: 100%;
+}
